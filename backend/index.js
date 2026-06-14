@@ -1,7 +1,10 @@
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 
+const DATA_FILE = path.join(__dirname, "data", "pokemon.json");
 const app = express();
 
 app.use(cors());
@@ -83,7 +86,31 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/api/saved", (req, res) => {
+  try {
+    const data = fs.readFileSync(DATA_FILE, "utf-8");
+    res.json(JSON.parse(data));
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 const PORT = process.env.PORT || 4000;
+
+app.post("/api/saved", (req, res) => {
+  const data = req.body;
+
+  // 🚨 safety check: NEVER overwrite with empty array on startup glitch
+  if (!data || data.length === 0) {
+    console.log("Blocked empty overwrite ❌");
+    return res.json({ status: "ignored-empty" });
+  }
+
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+  console.log("Saved Pokémon:", data.length);
+  res.json({ status: "ok" });
+});
 
 app.listen(PORT, () => {
   console.log(`Pokemon backend running on http://localhost:${PORT}`);
