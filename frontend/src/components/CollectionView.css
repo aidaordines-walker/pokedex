@@ -1,3 +1,5 @@
+
+
 /* Full page sticker book — sits inside .main-content */
 
 .cv-page {
@@ -161,4 +163,14 @@
   font-weight: bold;
   padding: 2px 5px;
   border-radius: 99px;
+}
+
+/* Rarity badge — bottom left, overlaid on the card image */
+.cv-rarity-badge {
+  position: absolute;
+  bottom: 22px; /* sits above the card name */
+  left: 4px;
+  transform: scale(0.85);
+  transform-origin: bottom left;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
 }

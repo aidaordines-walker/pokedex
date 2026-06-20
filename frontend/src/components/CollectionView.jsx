@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import "./CollectionView.css";
+import { RarityBadge } from "./rarityUtils";
 
-const SETS_API =
-  "https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate&pageSize=50";
+const SETS_API = "http://localhost:4000/api/sets";
 
 const CARDS_API = (setId) =>
-  `https://api.pokemontcg.io/v2/cards?q=set.id:${setId}&orderBy=number&pageSize=500`;
+  `http://localhost:4000/api/sets/${setId}/cards`;
 
 export default function CollectionView({ collection = [], onClose }) {
   const [sets, setSets] = useState([]);
@@ -26,7 +26,7 @@ export default function CollectionView({ collection = [], onClose }) {
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
-        setSets(Array.isArray(d?.data) ? d.data : []);
+        setSets(Array.isArray(d) ? d : []);
       })
       .catch((err) => {
         console.log("Failed to load sets:", err);
@@ -61,7 +61,7 @@ export default function CollectionView({ collection = [], onClose }) {
       .then((d) => {
         if (cancelled) return;
 
-        const cards = Array.isArray(d?.data) ? d.data : [];
+        const cards = Array.isArray(d) ? d : [];
 
         cardsCache.current[selectedSetId] = cards;
         setSetCards(cards);
@@ -213,6 +213,9 @@ export default function CollectionView({ collection = [], onClose }) {
                         ×{item.quantity}
                       </span>
                     )}
+                    <span className="cv-rarity-badge">
+                      <RarityBadge card={card} size="sm" />
+                    </span>
                   </>
                 ) : (
                   <div className="cv-blank">

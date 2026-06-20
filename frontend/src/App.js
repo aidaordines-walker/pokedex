@@ -4,6 +4,8 @@ import { searchCards } from "./api";
 import CardStats from "./components/CardStats";
 import CollectionView from "./components/CollectionView";
 
+import { RarityBadge } from "./components/rarityUtils";
+
 function App() {
   const [searchName, setSearchName] = useState("");
   const [cards, setCards] = useState([]);
@@ -14,28 +16,48 @@ function App() {
   const [filter, setFilter] = useState("ALL");
   const [showStickerBook, setShowStickerBook] = useState(false);
 
-  // =========================
-  // LOAD COLLECTION (localStorage)
-  // =========================
-  useEffect(() => {
-    const saved = localStorage.getItem("pokemon-collection");
+  // Sidebar-specific filters (independent from main search filter)
+  const [sidebarNameSearch, setSidebarNameSearch] = useState("");
+  const [sidebarRarity, setSidebarRarity] = useState("ALL");
+  const [sidebarDuplicatesOnly, setSidebarDuplicatesOnly] = useState(false);
+  const [sidebarSort, setSidebarSort] = useState("name"); // name | value | rarity | newest
 
-    if (saved) {
-      try {
-        setCollection(JSON.parse(saved));
-      } catch (e) {
-        console.log("Failed to load collection");
+  // =========================
+  // LOAD COLLECTION (backend)
+  // =========================
+useEffect(() => {
+  fetch("http://localhost:4000/api/saved")
+    .then((res) => res.json())
+    .then((data) => {
+      if (Array.isArray(data)) {
+        setCollection(data);
       }
-    }
-  }, []);
+    })
+    .catch((err) =>
+      console.log("Backend load failed:", err)
+    );
+}, []);
 
   // SAVE COLLECTION
-  useEffect(() => {
-    localStorage.setItem(
-      "pokemon-collection",
-      JSON.stringify(collection)
-    );
-  }, [collection]);
+useEffect(() => {
+  if (collection.length === 0) return;
+
+  fetch("http://localhost:4000/api/saved", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(
+  collection.map((item) => ({
+    id: item.card.id,
+    quantity: item.quantity,
+    addedAt: item.addedAt,
+  }))
+),
+  }).catch((err) =>
+    console.log("Backend save failed:", err)
+  );
+}, [collection]);
 
   // =========================
   // SEARCH CARDS
@@ -97,8 +119,70 @@ function App() {
   };
 
   // =========================
-  // ADD TO COLLECTION
+  // RARITY TIER (for sort)
   // =========================
+  const RARITY_TIER = {
+    "Common": 1, "Uncommon": 2,
+    "Rare": 3, "Rare Holo": 3, "Rare BREAK": 3,
+    "Rare Holo EX": 4, "Rare Holo GX": 4, "Rare Holo V": 4,
+    "Rare Holo VMAX": 4, "Rare Holo VSTAR": 4,
+    "Double Rare": 5, "Ultra Rare": 5, "Rare Ultra": 5,
+    "ACE SPEC Rare": 5, "Trainer Gallery Rare Holo": 5,
+    "Illustration Rare": 6, "Classic Collection": 6,
+    "Special Illustration Rare": 7,
+    "Hyper Rare": 8, "Secret Rare": 8, "Rare Secret": 8,
+    "Rainbow Rare": 8, "Rare Rainbow": 8,
+    "Shiny Rare": 8, "Shiny Ultra Rare": 9,
+  };
+
+  const getRarityTier = (card) => RARITY_TIER[card?.rarity] || 0;
+
+  // =========================
+  // SIDEBAR FILTERED + SORTED LIST
+  // =========================
+  const sidebarItems = (() => {
+    let items = collection.slice();
+
+    // Name search
+    if (sidebarNameSearch.trim()) {
+      const q = sidebarNameSearch.trim().toLowerCase();
+      items = items.filter((item) =>
+        // Match on the base Pokémon name (strip " V", " VMAX" etc.)
+        item.card.name.toLowerCase().includes(q)
+      );
+    }
+
+    // Rarity filter
+    if (sidebarRarity !== "ALL") {
+      items = items.filter((item) => {
+        const r = item.card.rarity || "";
+        if (sidebarRarity === "COMMON")    return r === "Common";
+        if (sidebarRarity === "UNCOMMON")  return r === "Uncommon";
+        if (sidebarRarity === "RARE")      return r.startsWith("Rare") && !r.toLowerCase().includes("secret") && !r.toLowerCase().includes("ultra") && !r.toLowerCase().includes("rainbow");
+        if (sidebarRarity === "ULTRA")     return r === "Ultra Rare" || r === "Rare Ultra" || r === "Double Rare" || r === "ACE SPEC Rare";
+        if (sidebarRarity === "ILLUSTRATION") return r === "Illustration Rare" || r === "Special Illustration Rare" || r === "Classic Collection";
+        if (sidebarRarity === "SECRET")    return r.toLowerCase().includes("secret") || r.toLowerCase().includes("rainbow") || r.toLowerCase().includes("hyper") || r.toLowerCase().includes("shiny");
+        if (sidebarRarity === "PROMO")     return r === "Promo" || r === "Black Star Promo";
+        return true;
+      });
+    }
+
+    // Duplicates only
+    if (sidebarDuplicatesOnly) {
+      items = items.filter((item) => item.quantity > 1);
+    }
+
+    // Sort
+    items.sort((a, b) => {
+      if (sidebarSort === "name")    return a.card.name.localeCompare(b.card.name);
+      if (sidebarSort === "value")   return getCardValue(b.card) - getCardValue(a.card);
+      if (sidebarSort === "rarity")  return getRarityTier(b.card) - getRarityTier(a.card);
+      if (sidebarSort === "newest")  return (b.addedAt || 0) - (a.addedAt || 0);
+      return 0;
+    });
+
+    return items;
+  })();
   const addToCollection = () => {
     if (!selectedCard) return;
 
@@ -314,6 +398,13 @@ function App() {
 
                   <div className="card-details">
                     <h2>{selectedCard.name}</h2>
+
+                    {selectedCard.rarity && (
+                      <div style={{ margin: "6px 0 12px" }}>
+                        <RarityBadge card={selectedCard} size="lg" />
+                      </div>
+                    )}
+
                     <CardStats card={selectedCard} />
 
                     <button
@@ -357,6 +448,10 @@ function App() {
                         />
                         <h4>{card.name}</h4>
 
+                        <div style={{ margin: "4px 0" }}>
+                          <RarityBadge card={card} size="sm" />
+                        </div>
+
                         <p className="snippet">
                           {getCardTags(card).map((tag) => (
                             <span
@@ -386,95 +481,124 @@ function App() {
       <aside className="collection-sidebar">
         <h2>📚 Collection</h2>
 
-        <div className="filter-bar">
-          {[
-            "ALL",
-            "VMAX",
-            "VSTAR",
-            "V",
-            "RARE",
-            "SECRET RARE",
-          ].map((f) => (
+        {/* ── NAME SEARCH ── */}
+        <div className="sidebar-search-wrap">
+          <input
+            className="sidebar-search"
+            type="text"
+            placeholder="🔎 Filter by name…"
+            value={sidebarNameSearch}
+            onChange={(e) => setSidebarNameSearch(e.target.value)}
+          />
+          {sidebarNameSearch && (
             <button
-              key={f}
-              className={`filter-btn ${
-                filter === f ? "active" : ""
-              }`}
-              onClick={() => setFilter(f)}
+              className="sidebar-search-clear"
+              onClick={() => setSidebarNameSearch("")}
+            >×</button>
+          )}
+        </div>
+
+        {/* ── RARITY PILLS ── */}
+        <div className="sidebar-section-label">Rarity</div>
+        <div className="sidebar-pills">
+          {[
+            { key: "ALL",          label: "All" },
+            { key: "COMMON",       label: "● Common" },
+            { key: "UNCOMMON",     label: "◆ Uncommon" },
+            { key: "RARE",         label: "★ Rare" },
+            { key: "ULTRA",        label: "★★ Ultra" },
+            { key: "ILLUSTRATION", label: "★★★ Illus." },
+            { key: "SECRET",       label: "✦ Secret" },
+            { key: "PROMO",        label: "⬛ Promo" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              className={`sidebar-pill ${sidebarRarity === key ? "active" : ""}`}
+              onClick={() => setSidebarRarity(key)}
             >
-              {f}
+              {label}
             </button>
           ))}
         </div>
 
+        {/* ── SORT + DUPLICATES ROW ── */}
+        <div className="sidebar-controls-row">
+          <select
+            className="sidebar-sort"
+            value={sidebarSort}
+            onChange={(e) => setSidebarSort(e.target.value)}
+          >
+            <option value="name">A → Z</option>
+            <option value="rarity">Rarity ↓</option>
+            <option value="value">Value ↓</option>
+            <option value="newest">Newest first</option>
+          </select>
+
+          <button
+            className={`sidebar-toggle ${sidebarDuplicatesOnly ? "active" : ""}`}
+            onClick={() => setSidebarDuplicatesOnly((v) => !v)}
+            title="Show only cards you have more than one of"
+          >
+            ⧉ Dupes
+          </button>
+        </div>
+
+        {/* ── RESULT COUNT ── */}
+        <div className="sidebar-result-count">
+          {sidebarItems.length} card{sidebarItems.length !== 1 ? "s" : ""}
+          {sidebarDuplicatesOnly && " · duplicates only"}
+          {sidebarRarity !== "ALL" && ` · ${sidebarRarity.toLowerCase()}`}
+          {sidebarNameSearch && ` · "${sidebarNameSearch}"`}
+        </div>
+
         {collection.length === 0 && (
-          <p>No cards collected yet.</p>
+          <p className="sidebar-empty">No cards collected yet.</p>
         )}
 
+        {collection.length > 0 && sidebarItems.length === 0 && (
+          <p className="sidebar-empty">No cards match these filters.</p>
+        )}
+
+        {/* ── CARD LIST ── */}
         <div className="collection-list">
-          {collection
-            .slice()
-            .sort((a, b) =>
-              a.card.name.localeCompare(b.card.name)
-            )
-            .filter(
-              (item) =>
-                filter === "ALL" ||
-                getCardTags(item.card).includes(filter)
-            )
-            .map((item) => (
-              <div
-                key={item.card.id}
-                className={`collection-row ${
-                  selectedCard?.id === item.card.id
-                    ? "selected"
-                    : ""
-                }`}
-                onClick={(e) => {
-                  if (e.target.closest("button")) return;
-                  setSelectedCard(item.card);
-                }}
-              >
-                <div className="collection-info">
-                  <h4>{item.card.name}</h4>
-                  <p>{item.card.set?.name}</p>
-                </div>
-
-                <div className="qty-controls">
-                  <button
-                    onClick={() =>
-                      decreaseQty(item.card.id)
-                    }
-                  >
-                    −
-                  </button>
-                  <span>{item.quantity}</span>
-                  <button
-                    onClick={() =>
-                      increaseQty(item.card.id)
-                    }
-                  >
-                    +
-                  </button>
-                </div>
-
-                <button
-                  onClick={() =>
-                    removeFromCollection(item.card.id)
-                  }
-                >
-                  🗑
-                </button>
-
-                <div className="value">
-                  €
-                  {(
-                    getCardValue(item.card) *
-                    item.quantity
-                  ).toFixed(2)}
-                </div>
+          {sidebarItems.map((item) => (
+            <div
+              key={item.card.id}
+              className={`collection-row ${
+                selectedCard?.id === item.card.id ? "selected" : ""
+              } ${item.quantity > 1 ? "has-dupes" : ""}`}
+              onClick={(e) => {
+                if (e.target.closest("button")) return;
+                setSelectedCard(item.card);
+              }}
+            >
+              <div className="collection-info">
+                <h4>{item.card.name}</h4>
+                <p>{item.card.set?.name}</p>
+                {item.card.rarity && (
+                  <div style={{ marginTop: "3px" }}>
+                    <RarityBadge card={item.card} size="sm" />
+                  </div>
+                )}
               </div>
-            ))}
+
+              <div className="qty-controls">
+                <button onClick={() => decreaseQty(item.card.id)}>−</button>
+                <span className={item.quantity > 1 ? "qty-highlight" : ""}>
+                  {item.quantity}
+                </span>
+                <button onClick={() => increaseQty(item.card.id)}>+</button>
+              </div>
+
+              <button onClick={() => removeFromCollection(item.card.id)}>
+                🗑
+              </button>
+
+              <div className="value">
+                €{(getCardValue(item.card) * item.quantity).toFixed(2)}
+              </div>
+            </div>
+          ))}
         </div>
       </aside>
     </div>
