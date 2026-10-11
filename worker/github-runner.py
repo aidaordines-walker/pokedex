@@ -52,8 +52,8 @@ def main():
             image = 'pokedex-test:' + str(build['id'])
             execute(['docker', 'build', '--progress=plain', '-t', image, str(source)], 480)
             # The generated source gets no credentials, host environment, or network.
-            command = ['docker', 'run', '--rm', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges',
-                       '--memory=3g', '--pids-limit=512', '--read-only', '--tmpfs', '/tmp:rw,size=256m', '--tmpfs', '/app/node_modules/.cache:rw,size=256m',
+            command = ['docker', 'run', '--rm', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--user', f'{os.getuid()}:{os.getgid()}',
+                       '--memory=3g', '--pids-limit=512', '--read-only', '--tmpfs', '/tmp:rw,size=256m,mode=1777', '--tmpfs', '/app/node_modules/.cache:rw,size=256m,mode=1777',
                        '--mount', f'type=bind,src={source / "src"},dst=/app/src,readonly',
                        '--mount', f'type=bind,src={source / "public"},dst=/app/public,readonly',
                        '--mount', f'type=bind,src={output},dst=/output',
@@ -75,6 +75,8 @@ def main():
         body = str(error).encode('utf8')[-12000:]
     request('/' + str(build['id']) + '/result', body, {'X-Build-Lease': build['lease'], 'X-Build-Passed': str(passed).lower(), 'Content-Type': 'application/octet-stream'})
     print('Build passed.' if passed else 'Build failed; private diagnostics returned to IONOS.')
+    if not passed:
+        raise SystemExit(1)
 
 if __name__ == '__main__':
     main()
