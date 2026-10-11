@@ -50,7 +50,7 @@ def main():
             # Only trusted dependency manifests are sent by IONOS; the model cannot modify them.
             (source / 'Dockerfile').write_text('FROM node:22-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci --ignore-scripts --no-audit --no-fund\n', encoding='utf8')
             image = 'pokedex-test:' + str(build['id'])
-            execute(['docker', 'build', '--quiet', '-t', image, str(source)], 480)
+            execute(['docker', 'build', '--progress=plain', '-t', image, str(source)], 480)
             # The generated source gets no credentials, host environment, or network.
             command = ['docker', 'run', '--rm', '--network=none', '--cap-drop=ALL', '--security-opt=no-new-privileges',
                        '--memory=3g', '--pids-limit=512', '--read-only', '--tmpfs', '/tmp:rw,size=256m', '--tmpfs', '/app/node_modules/.cache:rw,size=256m',
