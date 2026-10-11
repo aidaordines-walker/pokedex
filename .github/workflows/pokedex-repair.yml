@@ -1,0 +1,26 @@
+name: Pokédex repair build runner
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/pokedex-repair.yml'
+      - 'worker/github-runner.py'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: pokedex-repair-runner
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test one pending repair without hosting or Gemini credentials
+        run: python3 worker/github-runner.py
